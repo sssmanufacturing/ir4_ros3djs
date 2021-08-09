@@ -63,7 +63,10 @@ ROS3D.TriangleList = function(options) {
   geometry.computeBoundingSphere();
   geometry.computeFaceNormals();
 
-  this.add(new THREE.Mesh(geometry, material));
+  // Migrate to faster BufferGeometry which is pre-optimized for GPU
+  var bufferGeometry = new THREE.BufferGeometry().fromGeometry( geometry );
+
+  this.add(new THREE.Mesh(bufferGeometry, material));
 };
 ROS3D.TriangleList.prototype.__proto__ = THREE.Object3D.prototype;
 

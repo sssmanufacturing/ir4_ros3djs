@@ -63,23 +63,39 @@ ROS3D.MarkerClient.prototype.subscribe = function(){
     ros : this.ros,
     name : this.topicName,
     messageType : 'visualization_msgs/Marker',
-    compression : 'png'
+    compression : '' //png
   });
   this.rosTopic.subscribe(this.processMessage.bind(this));
 };
 
 ROS3D.MarkerClient.prototype.processMessage = function(message){
+
+
   // remove old marker from Three.Object3D children buffer
   var oldNode = this.markers[message.ns + message.id];
   this.updatedTime[message.ns + message.id] = new Date().getTime();
+
+  /* console.log('MarkerClient.processMessage: message.type=');
+  console.log(message.type); */
+
+  var updated = false;
   if (oldNode) {
-    this.removeMarker(message.ns + message.id);
+    if (message.action === 0) {
+      updated = this.markers[message.ns + message.id].children[0].update(message);
+      if(!updated) { // "REMOVE"
+        this.removeMarker(message.ns + message.id);
+      }
+    }
+    else {
+      this.removeMarker(message.ns + message.id);
+    }
+    
 
   } else if (this.lifetime) {
     this.checkTime(message.ns + message.id);
   }
 
-  if (message.action === 0) {  // "ADD" or "MODIFY"
+  if (message.action === 0 && !updated) {  // "ADD" or "MODIFY"
     var newMarker = new ROS3D.Marker({
       message : message,
       path : this.path,
@@ -105,6 +121,43 @@ ROS3D.MarkerClient.prototype.removeMarker = function(key) {
   this.rootObject.remove(oldNode);
   oldNode.children.forEach(child => {
     child.dispose();
+    this.disposeObject(child);
+    if(child.resource) {child.resource.dispose(); }
   });
   delete(this.markers[key]);
 };
+
+ROS3D.MarkerClient.prototype.isRenderItem = function (obj) {
+  return 'geometry' in obj && 'material' in obj;
+}
+
+ROS3D.MarkerClient.prototype.disposeMaterial = function (obj) {
+  if (!this.isRenderItem(obj)) {
+    return;
+  }
+
+  // because obj.material can be a material or array of materials
+  const materials = [].concat(obj.material);
+
+  for (const material of materials) {
+      material.dispose();
+  }
+}
+
+ROS3D.MarkerClient.prototype.disposeObject = function (obj, removeFromParent = true, destroyGeometry = true, destroyMaterial = true) {
+  if (!obj) {
+    return;
+  } 
+
+  if (this.isRenderItem(obj)) {
+      if (obj.geometry && destroyGeometry) { obj.geometry.dispose();}
+      if (destroyMaterial) { this.disposeMaterial(obj); }
+  }
+
+ /*  removeFromParent &&
+      Promise.resolve().then(() => {
+          // if we remove children in the same tick then we can't continue traversing,
+          // so we defer to the next microtask
+          obj.parent && obj.parent.remove(obj)
+      }) */
+}

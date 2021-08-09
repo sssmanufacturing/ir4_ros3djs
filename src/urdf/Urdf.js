@@ -27,6 +27,7 @@ ROS3D.Urdf = function(options) {
 
   // load all models
   var links = urdfModel.links;
+  var linkIndex = 0;
   for ( var l in links) {
     var link = links[l];
     for( var i=0; i<link.visuals.length; i++ ) {
@@ -70,8 +71,20 @@ ROS3D.Urdf = function(options) {
                 tfClient : tfClient,
                 object : mesh
             });
-            sceneNode.name = visual.name;
+            if(visual.name) {
+              sceneNode.name = visual.name;
+            }
+            else {
+              sceneNode.name = link.name;
+            }
+            var cameraView = new THREE.Object3D;
+            cameraView.name = sceneNode.name + '_view';
+            sceneNode.add(cameraView);
+
+            console.log('Urdf: sceneNode.name: '+sceneNode.name)
             this.add(sceneNode);
+
+            cameraView.position.set(0, 1.0, -0.5);
           } else {
             console.warn('Could not load geometry mesh: '+uri);
           }
@@ -89,6 +102,7 @@ ROS3D.Urdf = function(options) {
         }
       }
     }
+    linkIndex++;
   }
 };
 

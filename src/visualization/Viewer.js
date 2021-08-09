@@ -42,14 +42,18 @@ ROS3D.Viewer = function(options) {
     y : 3,
     z : 3
   };
+  var followCameraOption = options.followCamera || true;
   var cameraZoomSpeed = options.cameraZoomSpeed || 0.5;
   var displayPanAndZoomFrame = (options.displayPanAndZoomFrame === undefined) ? true : !!options.displayPanAndZoomFrame;
   var lineTypePanAndZoomFrame = options.lineTypePanAndZoomFrame || 'full';
+  
+  
 
   // create the canvas to render to
   this.renderer = new THREE.WebGLRenderer({
     antialias : antialias,
-    alpha: true
+    alpha: false,
+    powerPreference: 'high-performance'
   });
   this.renderer.setClearColor(parseInt(background.replace('#', '0x'), 16), alpha);
   this.renderer.sortObjects = false;
@@ -73,11 +77,20 @@ ROS3D.Viewer = function(options) {
     lineTypePanAndZoomFrame: lineTypePanAndZoomFrame
   });
   this.cameraControls.userZoomSpeed = cameraZoomSpeed;
+  //this.cameraControls.addEventListener( 'change', this.updateLight() );
+
+  // Sets the follow camera enable
+  this.smoothedCameraView = new THREE.Vector3;
+  this.followCamera = followCameraOption;
+  this.followObject = this.scene.getObjectByName('welder_tool');
+  this.followObjectView = this.scene.getObjectByName('welder_tool_view');
 
   // lights
-  this.scene.add(new THREE.AmbientLight(0x555555));
+  this.scene.add(new THREE.AmbientLight(0x666666));
   this.directionalLight = new THREE.DirectionalLight(0xffffff, intensity);
   this.scene.add(this.directionalLight);
+  //this.camera.add(this.directionalLight);
+  //this.scene.add(this.camera);
 
   // propagates mouse events to three.js objects
   this.selectableObjects = new THREE.Group();
@@ -116,6 +129,7 @@ ROS3D.Viewer.prototype.start = function(){
 /**
  * Renders the associated scene to the viewer.
  */
+
 ROS3D.Viewer.prototype.draw = function(){
   if(this.stopped){
     // Do nothing if stopped
@@ -123,21 +137,90 @@ ROS3D.Viewer.prototype.draw = function(){
   }
 
   // update the controls
-  this.cameraControls.update();
+  if(!this.followCamera) { 
+    this.cameraControls.update(); 
+  }
+  else {
+    // Check the objects are defined in the scene
+    if(!this.followObject)     { this.followObject     = this.scene.getObjectByName('welder_tool'); }
+    if(!this.followObjectView) { this.followObjectView = this.scene.getObjectByName('welder_tool_view'); }
+    
+    if(this.followObject && this.followObjectView) {
+      // Smoothly move the camera to follow the view object
+      this.smoothedCameraView.setFromMatrixPosition(this.followObjectView.matrixWorld);
+      this.camera.position.lerp(this.smoothedCameraView, 0.2);
+      this.camera.lookAt( this.followObject.position );
+    }
+  }
 
   // put light to the top-left of the camera
   // BUG: position is a read-only property of DirectionalLight,
   // attempting to assign to it either does nothing or throws an error.
   //this.directionalLight.position = this.camera.localToWorld(new THREE.Vector3(-1, 1, 0));
+  
+  if(this.followCamera && this.followObject && this.followObjectView) {
+    //this.directionalLight.target = this.followObject;
+  }
+  this.directionalLight.position.copy( this.camera.position );
   this.directionalLight.position.normalize();
+ 
+
+  
+  
+  
 
   // set the scene
   this.renderer.clear(true, true, true);
   this.renderer.render(this.scene, this.camera);
-  this.highlighter.renderHighlights(this.scene, this.renderer, this.camera);
+  //this.highlighter.renderHighlights(this.scene, this.renderer, this.camera);
 
-  // draw the frame
-  this.animationRequestId = requestAnimationFrame(this.draw.bind(this));
+  if(false) {
+    this.animationRequestId = requestAnimationFrame(this.draw.bind(this));
+  }
+  else{
+    // draw the frame (At maximum of 30fps)
+    var that = this;
+    setTimeout( function() {
+
+      that.animationRequestId = requestAnimationFrame(that.draw.bind(that));
+
+    }, 1000 / 30 );
+  }
+  
+
+  
+  
+};
+
+ROS3D.Viewer.prototype.updateLight = function(){
+  if(this.directionalLight) {
+    this.directionalLight.position.copy( this.camera.position );
+  } 
+};
+
+
+/**
+ *  Enable follow camera
+ */
+ ROS3D.Viewer.prototype.enableFollowCamera = function(){
+  this.followCamera = true;
+};
+
+/**
+ *  Disable follow camera
+ */
+ ROS3D.Viewer.prototype.disableFollowCamera = function(){
+  if(this.followObject && this.followObjectView) {
+    if(this.followCamera) {
+      // Set the user camera controls to the current follow view
+      this.cameraControls.lastPosition = this.camera.position;
+      this.cameraControls.center = this.followObject.position;
+      
+    }
+   
+  } 
+  
+  this.followCamera = false;
 };
 
 /**

@@ -47,7 +47,13 @@ export default [
     plugins: [
       nodeResolve({ browser: true }),
       commonjs(),
-      buble(),
+      buble({
+        objectAssign: 'Object.assign',
+        transforms: {
+            asyncAwait: false,
+            forOf: false
+        }
+      }),
       filesize(),
     ],
   },
@@ -68,7 +74,13 @@ export default [
     plugins: [
       nodeResolve({ browser: true }),
       commonjs(),
-      buble(),
+      buble({
+        objectAssign: 'Object.assign',
+        transforms: {
+            asyncAwait: false,
+            forOf: false
+        }
+      }),
       filesize(),
     ],
   },

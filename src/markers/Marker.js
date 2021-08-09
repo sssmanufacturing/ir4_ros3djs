@@ -32,11 +32,15 @@ ROS3D.Marker = function(options) {
   }
   this.msgColor = message.color;
   this.msgMesh = undefined;
+  this.msgPoints = 0;
 
   // set the pose and get the color
   this.setPose(message.pose);
   var colorMaterial = ROS3D.makeColorMaterial(this.msgColor.r,
       this.msgColor.g, this.msgColor.b, this.msgColor.a);
+
+    console.log('Marker: message.type=');
+    console.log(message.type);
 
   // create the object based on the type
   switch (message.type) {
@@ -81,7 +85,7 @@ ROS3D.Marker = function(options) {
       break;
     case ROS3D.MARKER_SPHERE:
       // set the sphere dimensions
-      var sphereGeom = new THREE.SphereGeometry(0.5);
+      var sphereGeom = new THREE.SphereBufferGeometry(0.5);
       var sphereMesh = new THREE.Mesh(sphereGeom, colorMaterial);
       sphereMesh.scale.x = message.scale.x;
       sphereMesh.scale.y = message.scale.y;
@@ -99,7 +103,7 @@ ROS3D.Marker = function(options) {
     case ROS3D.MARKER_LINE_STRIP:
       var lineStripGeom = new THREE.Geometry();
       var lineStripMaterial = new THREE.LineBasicMaterial({
-        size : message.scale.x
+        linewidth : message.scale.x
       });
 
       // add the points
@@ -130,7 +134,7 @@ ROS3D.Marker = function(options) {
     case ROS3D.MARKER_LINE_LIST:
       var lineListGeom = new THREE.Geometry();
       var lineListMaterial = new THREE.LineBasicMaterial({
-        size : message.scale.x
+        linewidth : message.scale.x
       });
 
       // add the points
@@ -202,7 +206,7 @@ ROS3D.Marker = function(options) {
       // add the points
       var q, sphere, curSphereColor, newSphereMesh;
       for (q = 0; q < numSpherePoints; q+=sphereStepSize) {
-        sphere = new THREE.SphereGeometry(0.5, 8, 8);
+        sphere = new THREE.SphereBufferGeometry(0.5, 8, 8);
 
         // check the color
         if(createSphereColors) {
@@ -251,8 +255,11 @@ ROS3D.Marker = function(options) {
         material.color.setRGB(message.color.r, message.color.g, message.color.b);
       }
 
+      // Migrate to faster BufferGeometry which is pre-optimized for GPU
+      var bufferGeometry = new THREE.BufferGeometry().fromGeometry( geometry );
+
       // add the particle system
-      this.add(new THREE.ParticleSystem(geometry, material));
+      this.add(new THREE.ParticleSystem(bufferGeometry, material));
       break;
     case ROS3D.MARKER_TEXT_VIEW_FACING:
       // only work on non-empty text
@@ -289,9 +296,7 @@ ROS3D.Marker = function(options) {
         texture.needsUpdate = true;
 
         var spriteMaterial = new THREE.SpriteMaterial({
-          map: texture,
-          // NOTE: This is needed for THREE.js r61, unused in r70
-          useScreenCoordinates: false });
+          map: texture});
         var sprite = new THREE.Sprite( spriteMaterial );
         var textSize = message.scale.x;
         sprite.scale.set(textWidth / canvas.height * textSize, textSize, 1);
@@ -336,6 +341,19 @@ ROS3D.Marker.prototype.__proto__ = THREE.Object3D.prototype;
  * @param pose - the pose to set for this marker
  */
 ROS3D.Marker.prototype.setPose = function(pose) {
+
+  // Check for changes
+  var positionChanged =
+        Math.abs(this.position.x - pose.position.x) > 1.0e-6 ||
+        Math.abs(this.position.y - pose.position.y) > 1.0e-6 ||
+        Math.abs(this.position.z - pose.position.z) > 1.0e-6;
+
+  var rotationChanged =
+        Math.abs(this.quaternion.x - pose.orientation.x) > 1.0e-6 ||
+        Math.abs(this.quaternion.y - pose.orientation.y) > 1.0e-6 ||
+        Math.abs(this.quaternion.z - pose.orientation.z) > 1.0e-6 ||
+        Math.abs(this.quaternion.w - pose.orientation.w) > 1.0e-6;
+
   // set position information
   this.position.x = pose.position.x;
   this.position.y = pose.position.y;
@@ -348,6 +366,8 @@ ROS3D.Marker.prototype.setPose = function(pose) {
 
   // update the world
   this.updateMatrixWorld();
+
+  return positionChanged || rotationChanged;
 };
 
 /**
@@ -358,7 +378,7 @@ ROS3D.Marker.prototype.setPose = function(pose) {
  */
 ROS3D.Marker.prototype.update = function(message) {
   // set the pose and get the color
-  this.setPose(message.pose);
+  var poseChanged = this.setPose(message.pose);
 
   // Update color
   if(message.color.r !== this.msgColor.r ||
@@ -440,14 +460,24 @@ ROS3D.Marker.prototype.update = function(message) {
         }
         break;
     case ROS3D.MARKER_ARROW:
-    case ROS3D.MARKER_LINE_STRIP:
     case ROS3D.MARKER_LINE_LIST:
     case ROS3D.MARKER_CUBE_LIST:
-    case ROS3D.MARKER_SPHERE_LIST:
     case ROS3D.MARKER_POINTS:
+          // TODO: Check if geometry changed
+          return false;
+          
+    case ROS3D.MARKER_LINE_STRIP:
+    case ROS3D.MARKER_SPHERE_LIST:
     case ROS3D.MARKER_TRIANGLE_LIST:
-        // TODO: Check if geometry changed
-        return false;
+          if(poseChanged || (this.msgPoints !== message.points.length &&             // Assume a complex object is very unlikely to have the same triangle count
+                              this.msgPoints > 10 && message.points.length > 10)) { // Not simple object like a cube
+            this.msgPoints = message.points.length;
+            //console.log('ROS3d::update: MARKER_TRIANGLE_LIST');
+            //console.log(this);
+            return false;
+          }
+          this.msgPoints = message.points.length;
+          break;
     default:
         break;
   }
