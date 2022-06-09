@@ -32,6 +32,7 @@ ROS3D.UrdfClient = function(options) {
   this.rootObject = options.rootObject || new THREE.Object3D();
   this.tfPrefix = options.tfPrefix || '';
   this.loader = options.loader;
+  this.followPose = options.followPose || {x: 0.0,  y: 1.0, z:  -0.5};
 
   // get the URDF value from ROS
   var getParam = new ROSLIB.Param({
@@ -50,7 +51,8 @@ ROS3D.UrdfClient = function(options) {
       path : that.path,
       tfClient : that.tfClient,
       tfPrefix : that.tfPrefix,
-      loader : that.loader
+      loader : that.loader,
+      followPose: that.followPose
     });
     that.rootObject.add(that.urdf);
   });

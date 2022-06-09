@@ -22,6 +22,7 @@ ROS3D.Urdf = function(options) {
   var tfClient = options.tfClient;
   var tfPrefix = options.tfPrefix || '';
   var loader = options.loader;
+  var followPose = options.followPose || {x: 0.0,  y: 1.0, z:  -0.5}
 
   THREE.Object3D.call(this);
 
@@ -84,7 +85,7 @@ ROS3D.Urdf = function(options) {
             console.log('Urdf: sceneNode.name: '+sceneNode.name)
             this.add(sceneNode);
 
-            cameraView.position.set(0, 1.0, -0.5);
+            cameraView.position.set(followPose.x, followPose.y, followPose.z);
           } else {
             console.warn('Could not load geometry mesh: '+uri);
           }
@@ -108,6 +109,10 @@ ROS3D.Urdf = function(options) {
 
 ROS3D.Urdf.prototype.createShapeMesh = function(visual, options) {
   var colorMaterial = null;
+  if (visual.material && visual.material.color) {
+    var color = visual.material && visual.material.color;
+    colorMaterial = ROS3D.makeColorMaterial(color.r, color.g, color.b, color.a);
+  }
   if (!colorMaterial) {
     colorMaterial = ROS3D.makeColorMaterial(0, 0, 0, 1);
   }

@@ -3,3 +3,9 @@
 node_modules
 doc
 src-esm
+
+build/
+
+.vscode/c_cpp_properties.json
+
+.vscode/settings.json

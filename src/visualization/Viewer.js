@@ -43,6 +43,8 @@ ROS3D.Viewer = function(options) {
     z : 3
   };
   var followCameraOption = options.followCamera || true;
+  var followObjectOption = options.followObject || 'welder_tool';
+  var zoomObjectOption = options.zoomObject || 'welder_tool';
   var cameraZoomSpeed = options.cameraZoomSpeed || 0.5;
   var displayPanAndZoomFrame = (options.displayPanAndZoomFrame === undefined) ? true : !!options.displayPanAndZoomFrame;
   var lineTypePanAndZoomFrame = options.lineTypePanAndZoomFrame || 'full';
@@ -82,8 +84,14 @@ ROS3D.Viewer = function(options) {
   // Sets the follow camera enable
   this.smoothedCameraView = new THREE.Vector3;
   this.followCamera = followCameraOption;
-  this.followObject = this.scene.getObjectByName('welder_tool');
-  this.followObjectView = this.scene.getObjectByName('welder_tool_view');
+  this.followObjectName = options.followObject || 'welder_tool';
+
+  // Sets the user view selection
+  this.instantCameraView = new THREE.Vector3;
+
+  // Sets the zoom parameters
+  this.zoomObjectName = options.zoomObject || followObjectOption;
+  
 
   // lights
   this.scene.add(new THREE.AmbientLight(0x666666));
@@ -141,10 +149,14 @@ ROS3D.Viewer.prototype.draw = function(){
     this.cameraControls.update(); 
   }
   else {
-    // Check the objects are defined in the scene
-    if(!this.followObject)     { this.followObject     = this.scene.getObjectByName('welder_tool'); }
-    if(!this.followObjectView) { this.followObjectView = this.scene.getObjectByName('welder_tool_view'); }
     
+
+    // Check the objects are defined in the scene
+    if(!this.followObject)     { this.followObject = this.scene.getObjectByName(this.followObjectName); }
+    if(!this.followObjectView) { this.followObjectView = this.scene.getObjectByName(this.followObjectName + '_view');}
+    
+ 
+
     if(this.followObject && this.followObjectView) {
       // Smoothly move the camera to follow the view object
       this.smoothedCameraView.setFromMatrixPosition(this.followObjectView.matrixWorld);
@@ -221,6 +233,101 @@ ROS3D.Viewer.prototype.updateLight = function(){
   } 
   
   this.followCamera = false;
+};
+
+/**
+ * Set view to follow
+ */
+ ROS3D.Viewer.prototype.setViewToFollow = function(){
+   
+    // Check the objects are defined in the scene
+    if(!this.followObject)     { this.followObject = this.scene.getObjectByName(this.followObjectName); }
+    if(!this.followObjectView) { this.followObjectView = this.scene.getObjectByName(this.followObjectName + '_view');} 
+
+  
+   if(this.followObject && this.followObjectView) {
+
+     // Smoothly move the camera to follow the view object
+     this.instantCameraView.setFromMatrixPosition(this.followObjectView.matrixWorld);
+     this.camera.position.lerp(this.instantCameraView, 1.0);
+     this.camera.lookAt( this.followObject.position );
+   }
+};
+
+/**
+ * Set view to top
+ */
+ ROS3D.Viewer.prototype.setViewByName = function(name){
+   
+  // Check the objects are defined in the scene
+  if(!this.zoomObject)     { this.zoomObject = this.scene.getObjectByName(this.zoomObjectName); }
+
+  if(this.zoomObject) {
+
+    const box = new THREE.Box3().setFromObject(this.zoomObject);
+    const size = box.getSize(new THREE.Vector3()).length();
+    const center = box.getCenter(new THREE.Vector3());
+
+  
+    this.camera.position.copy(center);
+
+    switch(name) {
+      case 'TOP':
+        
+        this.camera.position.x += size / 2.0;
+        this.camera.position.y += size / 2.0;
+        this.camera.position.z += size / 5.0;
+        this.camera.lookAt(center);
+
+
+        //this.camera.updateProjectionMatrix();
+        //
+        //this.camera.up = new THREE.Vector3(0,1,0)
+
+        this.fitCameraToObject(this.camera, this.zoomObject, 5 );
+        break;
+     
+      case 'ALL':
+        this.camera.position.x = 15000;
+        this.camera.position.y = 4000;
+        this.camera.position.z = 2000;
+        this.camera.lookAt(center);
+        this.fitCameraToObject(this.camera, this.zoomObject, 3 );
+        break;    
+      default:
+        // ignore
+    }
+  
+  }
+
+};
+
+ROS3D.Viewer.prototype.fitCameraToObject = function( camera, object, offset ) {
+
+  offset = offset || 1.5;
+  
+  const boundingBox = new THREE.Box3();
+  
+  boundingBox.setFromObject( object );
+  
+  const center = boundingBox.getCenter( new THREE.Vector3() );
+  const size = boundingBox.getSize( new THREE.Vector3() );
+  
+  const startDistance = center.distanceTo(camera.position);
+  // here we must check if the screen is horizontal or vertical, because camera.fov is
+  // based on the vertical direction.
+  const endDistance = camera.aspect > 1 ?
+            ((size.y/2)+offset) / Math.abs(Math.tan(camera.fov/2)) :
+            ((size.y/2)+offset) / Math.abs(Math.tan(camera.fov/2)) / camera.aspect ;
+  
+  
+  camera.position.set(
+    camera.position.x * endDistance / startDistance,
+    camera.position.y * endDistance / startDistance,
+    camera.position.z * endDistance / startDistance
+    );
+  camera.lookAt(center);
+
 };
 
 /**
